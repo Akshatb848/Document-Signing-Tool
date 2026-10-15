@@ -183,7 +183,7 @@ def _login_gate() -> bool:
     if settings.app_password == INSECURE_DEFAULT_PASSWORD:
         st.error(
             "APP_PASSWORD is still set to the insecure default (`change-me`). "
-            "Set a real password in `.env` before this tool can be used."
+            "Set a real password in `.env` locally, or in Streamlit Cloud secrets."
         )
         return False
 
@@ -1005,8 +1005,15 @@ def _step_complete() -> None:
         st.rerun()
 
 
-def main() -> None:
+@st.cache_resource
+def _bootstrap() -> bool:
     ensure_data_dirs()
+    ensure_letterhead_assets()
+    return True
+
+
+def main() -> None:
+    _bootstrap()
     _inject_layout_css()
     _init_session_state()
 

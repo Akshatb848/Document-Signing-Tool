@@ -85,16 +85,27 @@ class Settings:
         return bool(self.smtp_host and self.smtp_from)
 
 
+def _setting(key: str, default: str = "") -> str:
+    try:
+        import streamlit as st
+
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return os.environ.get(key, default)
+
+
 def get_settings() -> Settings:
     return Settings(
-        app_password=os.environ.get("APP_PASSWORD", "change-me"),
-        operator_name=os.environ.get("OPERATOR_NAME", "Sanjay Jha"),
-        smtp_host=os.environ.get("SMTP_HOST", ""),
-        smtp_port=int(os.environ.get("SMTP_PORT", "587")),
-        smtp_user=os.environ.get("SMTP_USER", ""),
-        smtp_password=os.environ.get("SMTP_PASSWORD", ""),
-        smtp_from=os.environ.get("SMTP_FROM", ""),
-        smtp_use_tls=os.environ.get("SMTP_USE_TLS", "true").lower() == "true",
+        app_password=_setting("APP_PASSWORD", "change-me"),
+        operator_name=_setting("OPERATOR_NAME", "Sanjay Jha"),
+        smtp_host=_setting("SMTP_HOST", ""),
+        smtp_port=int(_setting("SMTP_PORT", "587")),
+        smtp_user=_setting("SMTP_USER", ""),
+        smtp_password=_setting("SMTP_PASSWORD", ""),
+        smtp_from=_setting("SMTP_FROM", ""),
+        smtp_use_tls=_setting("SMTP_USE_TLS", "true").lower() == "true",
     )
 
 
