@@ -9,26 +9,19 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 SIGNATURES_DIR = DATA_DIR / "signatures"
+STAMPS_DIR = DATA_DIR / "stamps"
+LETTERHEADS_DIR = DATA_DIR / "letterheads"
 UPLOADS_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "output"
 AUDIT_DIR = DATA_DIR / "audit"
 AUDIT_CSV_PATH = AUDIT_DIR / "audit_log.csv"
 
-# Render scale: higher = sharper preview canvas (2.0 works well for placement)
+# High-res render, then downscaled to fit the operator viewport.
 PDF_RENDER_SCALE = 2.0
-
-AUDIT_COLUMNS = [
-    "log_id",
-    "timestamp",
-    "operator",
-    "document_filename",
-    "document_hash",
-    "partner_signed",
-    "page_number",
-    "position",
-    "output_filename",
-    "email_status",
-]
+DISPLAY_MAX_WIDTH = 760
+DISPLAY_MAX_HEIGHT = 860
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+MAX_PDF_PAGES = 50
 
 PARTNERS: dict[str, dict[str, str]] = {
     "Sanjay Pande": {
@@ -44,6 +37,21 @@ PARTNERS: dict[str, dict[str, str]] = {
         "email": "sunil.k.goyal@yournest.in",
     },
 }
+
+FUNDS: dict[str, str] = {
+    "Fund 1": "fund_1.png",
+    "Fund 2": "fund_2.png",
+    "Fund 3": "fund_3.png",
+    "Fund 4": "fund_4.png",
+    "Continuation Fund": "continuation_fund.png",
+    "AMC": "amc.png",
+}
+
+KIND_SIGNATURE = "signature"
+KIND_FUND = "fund"
+KIND_LETTERHEAD_HEADER = "letterhead_header"
+KIND_LETTERHEAD_FOOTER = "letterhead_footer"
+LETTERHEAD_KINDS = {KIND_LETTERHEAD_HEADER, KIND_LETTERHEAD_FOOTER}
 
 
 def _load_dotenv() -> None:
@@ -91,10 +99,33 @@ def get_settings() -> Settings:
 
 
 def ensure_data_dirs() -> None:
-    for path in (SIGNATURES_DIR, UPLOADS_DIR, OUTPUT_DIR, AUDIT_DIR):
+    for path in (
+        SIGNATURES_DIR,
+        STAMPS_DIR,
+        LETTERHEADS_DIR,
+        UPLOADS_DIR,
+        OUTPUT_DIR,
+        AUDIT_DIR,
+    ):
         path.mkdir(parents=True, exist_ok=True)
 
 
 def partner_signature_path(partner_name: str) -> Path:
     partner = PARTNERS[partner_name]
     return SIGNATURES_DIR / partner["signature_file"]
+
+
+def fund_stamp_path(fund_name: str) -> Path:
+    return STAMPS_DIR / FUNDS[fund_name]
+
+
+def asset_path(kind: str, name: str) -> Path:
+    from app.services.letterhead import letterhead_footer_path, letterhead_header_path
+
+    if kind == KIND_FUND:
+        return fund_stamp_path(name)
+    if kind == KIND_LETTERHEAD_HEADER:
+        return letterhead_header_path(name)
+    if kind == KIND_LETTERHEAD_FOOTER:
+        return letterhead_footer_path(name)
+    return partner_signature_path(name)

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #f1f5f9;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: #1f2937;
+    }
+    .wrap { padding: 8px 8px 4px; }
+    .hint {
+      font-size: 13px;
+      line-height: 1.4;
+      margin: 0 0 8px;
+      color: #334155;
+    }
+    .stage {
+      position: relative;
+      margin: 0 auto;
+      background: #fff;
+      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.12);
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+    }
+    .page {
+      display: block;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .stamp {
+      position: absolute;
+      cursor: grab;
+      box-sizing: border-box;
+      outline: 1px dashed rgba(29, 78, 216, 0.7);
+      background: transparent;
+    }
+    .stamp.active { outline: 2px solid #1d4ed8; z-index: 3; }
+    .stamp.overlap { outline: 2px solid #dc2626; }
+    .stamp.dragging { cursor: grabbing; }
+    .stamp img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .handle {
+      position: absolute;
+      right: -7px;
+      bottom: -7px;
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      background: #1d4ed8;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px #1d4ed8;
+      cursor: nwse-resize;
+    }
+    .stamp.overlap .handle { background: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
+    .label {
+      position: absolute;
+      left: 0;
+      top: -18px;
+      font-size: 11px;
+      line-height: 16px;
+      background: #1d4ed8;
+      color: #fff;
+      padding: 0 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .stamp.overlap .label { background: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="hint" id="hint">Drag a signature onto a blank line. Use the corner to resize. Add more stamps for other pages or partners.</p>
+    <div class="stage" id="stage">
+      <img class="page" id="page" alt="Document page" />
+    </div>
+  </div>
+  <script>
+    function send(type, data) {
+      window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), "*");
+    }
+
+    const stage = document.getElementById("stage");
+    const page = document.getElementById("page");
+    const hint = document.getElementById("hint");
+
+    let pageW = 600;
+    let pageH = 800;
+    let stamps = [];
+    let activeId = "";
+    let lastSent = "";
+    let drag = null;
+    const nodes = {};
+
+    function clampBox(next, aspect, fullSpan) {
+      const ratio = aspect > 0 ? aspect : 0.3;
+      const maxW = fullSpan ? pageW : Math.min(pageW * 0.7, (pageH * 0.45) / ratio);
+      const minW = fullSpan ? Math.min(pageW, pageW * 0.35) : 48;
+      const w = Math.max(minW, Math.min(next.w, maxW));
+      const h = w * ratio;
+      let x = next.x;
+      let y = next.y;
+      if (x < 0) x = 0;
+      if (y < 0) y = 0;
+      if (x + w > pageW) x = Math.max(0, pageW - w);
+      if (y + h > pageH) y = Math.max(0, pageH - h);
+      return { x: x, y: y, w: w, h: h };
+    }
+
+    function pointerPos(event) {
+      const rect = stage.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * (pageW / Math.max(rect.width, 1)),
+        y: (event.clientY - rect.top) * (pageH / Math.max(rect.height, 1)),
+      };
+    }
+
+    function emit(stamp) {
+      const value = {
+        id: stamp.id,
+        x: Math.round(stamp.x * 10) / 10,
+        y: Math.round(stamp.y * 10) / 10,
+        w: Math.round(stamp.w * 10) / 10,
+        h: Math.round(stamp.h * 10) / 10,
+      };
+      const key = JSON.stringify(value);
+      if (key === lastSent) return;
+      lastSent = key;
+      send("streamlit:setComponentValue", { value: value });
+    }
+
+    function applyNode(stamp) {
+      const el = nodes[stamp.id];
+      if (!el) return;
+      el.style.left = stamp.x + "px";
+      el.style.top = stamp.y + "px";
+      el.style.width = stamp.w + "px";
+      el.style.height = stamp.h + "px";
+      el.classList.toggle("active", stamp.id === activeId);
+      el.classList.toggle("overlap", !!stamp.overlap);
+    }
+
+    function bindStamp(el, stampId) {
+      const handle = el.querySelector(".handle");
+      el.addEventListener("pointerdown", function (event) {
+        if (event.target === handle) return;
+        event.preventDefault();
+        const stamp = stamps.find(function (item) { return item.id === stampId; });
+        if (!stamp) return;
+        activeId = stampId;
+        el.setPointerCapture(event.pointerId);
+        el.classList.add("dragging");
+        const p = pointerPos(event);
+        drag = { id: stampId, mode: "move", dx: p.x - stamp.x, dy: p.y - stamp.y };
+      });
+      handle.addEventListener("pointerdown", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const stamp = stamps.find(function (item) { return item.id === stampId; });
+        if (!stamp) return;
+        activeId = stampId;
+        el.setPointerCapture(event.pointerId);
+        drag = { id: stampId, mode: "resize" };
+      });
+      el.addEventListener("pointermove", function (event) {
+        if (!drag || drag.id !== stampId) return;
+        const stamp = stamps.find(function (item) { return item.id === stampId; });
+        if (!stamp) return;
+        const p = pointerPos(event);
+        const next = drag.mode === "move"
+          ? { x: p.x - drag.dx, y: p.y - drag.dy, w: stamp.w, h: stamp.h }
+          : { x: stamp.x, y: stamp.y, w: p.x - stamp.x, h: stamp.h };
+        const clamped = clampBox(next, stamp.aspect, !!stamp.full_span);
+        stamp.x = clamped.x;
+        stamp.y = clamped.y;
+        stamp.w = clamped.w;
+        stamp.h = clamped.h;
+        applyNode(stamp);
+      });
+      function endDrag() {
+        if (!drag || drag.id !== stampId) return;
+        drag = null;
+        el.classList.remove("dragging");
+        const stamp = stamps.find(function (item) { return item.id === stampId; });
+        if (stamp) emit(stamp);
+      }
+      el.addEventListener("pointerup", endDrag);
+      el.addEventListener("pointercancel", endDrag);
+    }
+
+    function syncNodes(nextStamps) {
+      const ids = {};
+      nextStamps.forEach(function (stamp) { ids[stamp.id] = true; });
+      Object.keys(nodes).forEach(function (id) {
+        if (!ids[id]) {
+          nodes[id].remove();
+          delete nodes[id];
+        }
+      });
+      nextStamps.forEach(function (stamp) {
+        if (nodes[stamp.id]) {
+          const img = nodes[stamp.id].querySelector("img");
+          if (img && stamp.sig_image) img.src = stamp.sig_image;
+          const label = nodes[stamp.id].querySelector(".label");
+          if (label) label.textContent = stamp.label || "";
+          applyNode(stamp);
+          return;
+        }
+        const el = document.createElement("div");
+        el.className = "stamp";
+        el.innerHTML = '<div class="label"></div><img alt="" /><div class="handle"></div>';
+        el.querySelector(".label").textContent = stamp.label || "";
+        el.querySelector("img").src = stamp.sig_image || "";
+        stage.appendChild(el);
+        nodes[stamp.id] = el;
+        bindStamp(el, stamp.id);
+        applyNode(stamp);
+      });
+    }
+
+    function render(args) {
+      if (!args || !args.page_image) return;
+      pageW = Number(args.width) || 600;
+      pageH = Number(args.height) || 800;
+      stage.style.width = pageW + "px";
+      stage.style.height = pageH + "px";
+      page.src = args.page_image;
+      if (args.hint) hint.textContent = args.hint;
+      const incoming = args.stamps || [];
+      stamps = incoming.map(function (item) {
+        const fullSpan = !!item.full_span;
+        const clamped = clampBox(item, Number(item.aspect) || 0.3, fullSpan);
+        return Object.assign({}, item, clamped, {
+          aspect: Number(item.aspect) || 0.3,
+          full_span: fullSpan,
+        });
+      });
+      if (args.active_id) activeId = args.active_id;
+      syncNodes(stamps);
+      send("streamlit:setFrameHeight", { height: pageH + 56 });
+    }
+
+    window.addEventListener("message", function (event) {
+      if (event.data && event.data.type === "streamlit:render") {
+        render(event.data.args || {});
+      }
+    });
+    send("streamlit:componentReady", { apiVersion: 1 });
+  </script>
+</body>
+</html>
