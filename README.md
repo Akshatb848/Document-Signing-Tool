@@ -128,7 +128,7 @@ pytest -q
 
 ## License
 
-Source code: [MIT](LICENSE) © 2026 Akshat Banga. Logos, letterhead artwork, stamps and signature images under `data/` belong to their respective owners and are not covered by this license.
+Source code: [MIT](LICENSE) © 2026 Akshat Banga. All signature, stamp and letterhead images under `data/` are generated placeholders (see `scripts/make_sample_stationery.py`); replace them with your own artwork for real use.
 
 ## Author
 
